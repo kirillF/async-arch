@@ -111,3 +111,19 @@ async def update_account(
         raise HTTPException(status_code=401, detail="Token has expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+@app.post("/verify")
+async def verify(token: str = Depends(oauth2_scheme)):
+    try:
+        payload = decode_access_token(token)
+        public_id = payload.get("sub")
+        account = await auth_service.get_account_by_public_id(public_id)
+        if account:
+            return {"status": "Token is valid"}
+        else:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token has expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")

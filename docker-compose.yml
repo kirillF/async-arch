@@ -27,6 +27,32 @@ services:
     networks:
       - mynetwork
 
+  tasktracker:
+    build:
+      context: ./tasktracker
+      dockerfile: Dockerfile
+    restart: always
+    env_file:
+      - ./tasktracker/.env
+    ports:
+      - 4000:4000
+    networks:
+      - mynetwork
+    depends_on:
+      - tasktracker-db
+    
+  tasktracker-db:
+    image: postgres
+    restart: always
+    env_file:
+      - ./tasktracker/.env
+    volumes:
+      - ./tasktracker/data:/var/lib/postgresql/data
+    ports:
+      - 5433:5432
+    networks:
+      - mynetwork
+
 networks:
   mynetwork:
     driver: bridge
