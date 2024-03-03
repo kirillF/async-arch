@@ -1,27 +1,27 @@
 version: '3'
 services:
 
-  service:
+  auth:
     build:
-      context: ./template-service
+      context: ./auth
       dockerfile: Dockerfile
     restart: always
     env_file:
-      - .env
+      - ./auth/.env
     ports:
-      - 8000:8000
+      - 3000:3000
     networks:
       - mynetwork
     depends_on:
-      - db
+      - auth-db
 
-  db:
+  auth-db:
     image: postgres
     restart: always
     env_file:
-      - .env
+      - ./auth/.env
     volumes:
-      - ./data:/var/lib/postgresql/data
+      - ./auth/data:/var/lib/postgresql/data
     ports:
       - 5432:5432
     networks:

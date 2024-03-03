@@ -1,0 +1,9 @@
+fastapi==0.109.2
+sqlalchemy==2.0.25
+uvicorn[standard]==0.27.0post1
+psycopg[binary,pool]==3.1.18
+alembic==1.13.1
+bcrypt==4.1.2
+pyjwt==2.8.0
+pydantic==2.6
+python-multipart==0.0.9
