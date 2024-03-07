@@ -4,10 +4,13 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from app.services import AuthService
 from app.security import create_access_token, hash_password, decode_access_token
 from app.models import Account
-from app.crud import UserRepository
+from app.repository import UserRepository
 import jwt
 import app.database as db
+from aiokafka import AIOKafkaProducer
 import os
+import uuid
+import json
 
 # Create the FastAPI app
 app = FastAPI()
@@ -16,6 +19,35 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 user_repo = UserRepository(db.AsyncSession)
 auth_service = AuthService(user_repo)
+
+producer = AIOKafkaProducer(bootstrap_servers=os.environ.get("KAFKA_BOOTSTRAP_SERVERS"))
+
+
+@app.on_event("startup")
+async def startup():
+    await producer.start()
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    await producer.stop()
+
+
+topic = "account-stream"
+
+
+def create_account_stream_event(event_type: str, account: Account):
+    return json.dumps(
+        {
+            "event_type": event_type,
+            "event_id": uuid.uuid4(),
+            "payload": {
+                "account_id": account.public_id,
+                "username": account.username,
+                "role": account.role,
+            },
+        },
+    default=str).encode()
 
 
 @app.post("/signup")
@@ -26,10 +58,11 @@ async def signup(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
 
     hashed_password = hash_password(form_data.password)
     account = Account(username=form_data.username, encrypted_password=hashed_password)
-    await auth_service.create_account(account)
+    account = await auth_service.create_account(account)
 
-    # TODO: produce event AccountCreatedEvent(account)
-
+    await producer.send_and_wait(
+        topic, value=create_account_stream_event("account_created", account)
+    )
     return {"account_id": account.public_id, "status": "Account created"}
 
 
@@ -79,9 +112,10 @@ async def delete_account(token: Annotated[str, Depends(oauth2_scheme)]):
         public_id = payload.get("sub")
         account = await auth_service.get_account_by_public_id(public_id)
         if account:
-            await auth_service.delete_account(account)
-            # TODO produce event AccountDeletedEvent(account)
-
+            deleted = await auth_service.delete_account(account)
+            producer.send_and_wait(
+                topic, value=create_account_stream_event("account_deleted", deleted)
+            )
             return {"status": "Account deleted"}
         else:
             raise HTTPException(status_code=401, detail="Invalid token")
@@ -102,9 +136,10 @@ async def update_account(
         account = await auth_service.get_account_by_public_id(public_id)
         if account:
             account.encrypted_password = hash_password(form_data.password)
-            await auth_service.update_account(account)
-            # TODO produce event AccountUpdatedEvent(account)
-
+            updated = await auth_service.update_account(account)
+            producer.send_and_wait(
+                topic, value=create_account_stream_event("account_updated", updated)
+            )
             return {"status": "Account updated"}
         else:
             raise HTTPException(status_code=401, detail="Invalid token")

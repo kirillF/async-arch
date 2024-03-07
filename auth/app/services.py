@@ -1,7 +1,7 @@
 from typing import Optional
 from app.security import verify_password
 from app.models import Account
-from app.crud import UserRepository
+from app.repository import UserRepository
 
 
 class AuthService:
