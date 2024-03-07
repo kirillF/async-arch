@@ -1,3 +1,4 @@
+from typing import Annotated
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from app.services import AuthService
@@ -11,14 +12,14 @@ import os
 # Create the FastAPI app
 app = FastAPI()
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 user_repo = UserRepository(db.AsyncSession)
 auth_service = AuthService(user_repo)
 
 
 @app.post("/signup")
-async def signup(form_data: OAuth2PasswordRequestForm = Depends()):
+async def signup(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     existing_account = await auth_service.get_account_by_username(form_data.username)
     if existing_account:
         raise HTTPException(status_code=400, detail="Username already registered")
@@ -32,8 +33,8 @@ async def signup(form_data: OAuth2PasswordRequestForm = Depends()):
     return {"account_id": account.public_id, "status": "Account created"}
 
 
-@app.post("/login")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+@app.post("/token")
+async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     account = await auth_service.authenticate_account(
         form_data.username, form_data.password
     )
@@ -51,7 +52,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 
 
 @app.get("/account")
-async def get_account(token: str = Depends(oauth2_scheme)):
+async def get_account(token: Annotated[str, Depends(oauth2_scheme)]):
     try:
         payload = decode_access_token(token)
         public_id = payload.get("sub")
@@ -72,7 +73,7 @@ async def get_account(token: str = Depends(oauth2_scheme)):
 
 
 @app.delete("/account")
-async def delete_account(token: str = Depends(oauth2_scheme)):
+async def delete_account(token: Annotated[str, Depends(oauth2_scheme)]):
     try:
         payload = decode_access_token(token)
         public_id = payload.get("sub")
@@ -92,8 +93,8 @@ async def delete_account(token: str = Depends(oauth2_scheme)):
 
 @app.put("/account")
 async def update_account(
-    token: str = Depends(oauth2_scheme),
-    form_data: OAuth2PasswordRequestForm = Depends(),
+    token: Annotated[str, Depends(oauth2_scheme)],
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ):
     try:
         payload = decode_access_token(token)
@@ -114,7 +115,7 @@ async def update_account(
 
 
 @app.post("/verify")
-async def verify(token: str = Depends(oauth2_scheme)):
+async def verify(token: Annotated[str, Depends(oauth2_scheme)]):
     try:
         payload = decode_access_token(token)
         public_id = payload.get("sub")
