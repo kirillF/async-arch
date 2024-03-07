@@ -20,7 +20,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 user_repo = UserRepository(db.AsyncSession)
 auth_service = AuthService(user_repo)
 
-producer = AIOKafkaProducer(bootstrap_servers=os.environ.get("KAFKA_BOOTSTRAP_SERVERS"))
+producer = AIOKafkaProducer(
+    bootstrap_servers=os.environ.get("KAFKA_BOOTSTRAP_SERVERS"),
+    value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8"),
+)
 
 
 @app.on_event("startup")
@@ -37,17 +40,15 @@ topic = "account-stream"
 
 
 def create_account_stream_event(event_type: str, account: Account):
-    return json.dumps(
-        {
-            "event_type": event_type,
-            "event_id": uuid.uuid4(),
-            "payload": {
-                "account_id": account.public_id,
-                "username": account.username,
-                "role": account.role,
-            },
+    return {
+        "event_type": event_type,
+        "event_id": uuid.uuid4(),
+        "payload": {
+            "account_id": account.public_id,
+            "username": account.username,
+            "role": account.role,
         },
-    default=str).encode()
+    }
 
 
 @app.post("/signup")
@@ -84,7 +85,7 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()]):
     return {"access_token": access_token, "token_type": "bearer"}
 
 
-@app.get("/account")
+@app.get("/verify")
 async def get_account(token: Annotated[str, Depends(oauth2_scheme)]):
     try:
         payload = decode_access_token(token)
@@ -96,12 +97,13 @@ async def get_account(token: Annotated[str, Depends(oauth2_scheme)]):
                 "account_id": account.public_id,
                 "username": account.username,
                 "role": role,
+                "expires_at": payload.get("exp"),
             }
         else:
             raise HTTPException(status_code=401, detail="Invalid token")
-    except jwt.ExpiredSignatureError:
+    except jwt.exceptions.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
+    except jwt.exceptions.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
@@ -119,9 +121,9 @@ async def delete_account(token: Annotated[str, Depends(oauth2_scheme)]):
             return {"status": "Account deleted"}
         else:
             raise HTTPException(status_code=401, detail="Invalid token")
-    except jwt.ExpiredSignatureError:
+    except jwt.exceptions.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
+    except jwt.exceptions.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
@@ -143,9 +145,9 @@ async def update_account(
             return {"status": "Account updated"}
         else:
             raise HTTPException(status_code=401, detail="Invalid token")
-    except jwt.ExpiredSignatureError:
+    except jwt.exceptions.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
+    except jwt.exceptions.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
@@ -159,7 +161,7 @@ async def verify(token: Annotated[str, Depends(oauth2_scheme)]):
             return {"status": "Token is valid"}
         else:
             raise HTTPException(status_code=401, detail="Invalid token")
-    except jwt.ExpiredSignatureError:
+    except jwt.exceptins.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.InvalidTokenError:
+    except jwt.exceptions.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
