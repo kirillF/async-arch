@@ -10,7 +10,8 @@ class Account(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     public_id = Column(String(50), unique=True, index=True, default=uuid.uuid4)
-    email = Column(String(50), unique=True, index=True)
+    username = Column(String(50), unique=True, index=True)
+    email = Column(String(50), unique=True, index=True, nullable=True)
     role = Column(String(50))
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(
@@ -31,6 +32,7 @@ class Task(Base):
     public_id = Column(String(50), unique=True, index=True, default=uuid.uuid4)
     description = Column(String(100))
     account_id = Column(Integer)
+    assignee_id = Column(Integer)
     status = Column(EnumColumn(Status), default=Status.CREATED)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -43,7 +45,6 @@ class AuthIdentity(Base):
     id = Column(Integer, primary_key=True, index=True)
     account_id = Column(Integer)
     token = Column(String(50), index=True, unique=True)
-    encrypted_password = Column(String(100))
     expires_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(

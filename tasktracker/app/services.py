@@ -1,6 +1,58 @@
-from tasktracker.app.repository import TaskRepository, AccountRepository
-from app.models import Account, Task, Status
+from fastapi import HTTPException, status
+from app.repository import TaskRepository, AccountRepository, AuthIdentityRepository
+from app.models import Account, Task, Status, AuthIdentity
+from datetime import datetime
+import httpx
 import random
+import os
+
+
+class AuthService:
+    verify_url = os.environ.get("AUTH_SERVICE_URL") + "/verify"
+
+    def __init__(
+        self, account_repo: AccountRepository, identity_repo: AuthIdentityRepository
+    ):
+        self.account_repo = account_repo
+        self.identity_repo = identity_repo
+
+    async def get_current_account(self, token: str):
+        credentials_exception = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        try:
+            authIdentity = await self.identity_repo.get_auth_identity_by_token(token)
+            if not authIdentity:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        self.verify_url,
+                        headers={"Authorization": f"Bearer {token}"},
+                    )
+                    if response.status_code == 200:
+                        account_id = response.json().get("account_id")
+                        account = await self.account_repo.get_account_by_public_id(
+                            account_id
+                        )
+                        if not account:
+                            account = Account(
+                                public_id=account_id,
+                                role=response.json().get("role"),
+                                username=response.json().get("username"),
+                            )
+                            account = await self.account_repo.add_account(account)
+                        await self.identity_repo.add_auth_identity(
+                            AuthIdentity(token=token, account_id=account.id)
+                        )
+                        return account
+                raise credentials_exception
+            if authIdentity.expires_at < datetime.now():
+                await self.identity_repo.delete_auth_identity(authIdentity)
+                raise credentials_exception
+            return await self.account_repo.get_account_by_id(authIdentity.account_id)
+        except:
+            raise credentials_exception
 
 
 class TaskService:
@@ -34,3 +86,39 @@ class TaskService:
         task.status = Status.COMPLETED
         await self.task_repo.update_task(task)
         return task
+
+
+class AccountService:
+    def __init__(self, account_repo: AccountRepository):
+        self.account_repo = account_repo
+
+    async def on_account_created(self, event):
+        account = Account(
+            public_id=event["payload"]["account_id"],
+            username=event["payload"]["username"],
+            role=event["payload"]["role"],
+        )
+        await self.account_repo.add_account(account)
+
+    async def on_account_deleted(self, event):
+        account = await self.account_repo.get_account_by_public_id(
+            event["payload"]["account_id"]
+        )
+        await self.account_repo.delete_account(account)
+
+    async def on_account_updated(self, event):
+        account = await self.account_repo.get_account_by_public_id(
+            event["payload"]["account_id"]
+        )
+        account.username = event["payload"]["username"]
+        account.role = event["payload"]["role"]
+        await self.account_repo.update_account(account)
+
+    async def get_account_by_public_id(self, public_id: str):
+        return await self.account_repo.get_account_by_public_id(public_id)
+
+    async def delete_account(self, account: Account):
+        return await self.account_repo.delete_account(account)
+
+    async def update_account(self, account: Account):
+        return await self.account_repo.update_account(account)

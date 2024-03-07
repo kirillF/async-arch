@@ -4,3 +4,5 @@ uvicorn[standard]==0.27.0post1
 psycopg[binary,pool]==3.1.18
 alembic==1.13.1
 pydantic==2.6
+aiokafka==0.10.0
+httpx==0.27.0

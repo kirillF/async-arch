@@ -13,6 +13,13 @@ class AuthIdentityRepository:
             result = await session.execute(select(AuthIdentity).filter_by(token=token))
             return result.scalar()
 
+    async def add_auth_identity(self, auth_identity: AuthIdentity) -> AuthIdentity:
+        async with self.async_session() as session:
+            session.add(auth_identity)
+            await session.commit()
+            await session.refresh(auth_identity)
+            return auth_identity
+
     async def delete_auth_identity(self, auth_identity: AuthIdentity) -> AuthIdentity:
         async with self.async_session() as session:
             await session.delete(auth_identity)
@@ -23,6 +30,11 @@ class AuthIdentityRepository:
 class AccountRepository:
     def __init__(self, async_session: async_sessionmaker[AsyncSession]):
         self.async_session = async_session
+
+    async def get_account_by_id(self, id: int) -> Optional[Account]:
+        with self.async_session() as session:
+            result = await session.execute(select(Account).filter_by(id=id))
+            return result.scalar()
 
     async def get_account_by_public_id(self, public_id: str) -> Optional[Account]:
         with self.async_session() as session:
