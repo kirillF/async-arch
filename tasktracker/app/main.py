@@ -91,6 +91,7 @@ async def shutdown():
 
 @app.get("/")
 async def index(current_account: Annotated[Account, Depends(get_current_account)]):
+    tasks = await tasksService.get_tasks_for_account(current_account)
     return {"message": "Hello, World"}
 
 
@@ -104,7 +105,9 @@ async def create_task(
     producer.send_and_wait(
         task_stream_topic, value=create_task_event("task_created", result)
     )
-    # TODO: produce event TaskAssignedEvent(result)
+    producer.send_and_wait(
+        tasks_topic, value=create_task_event("task_assigned", result)
+    )
     return {"message": "Task created successfully"}
 
 
@@ -113,7 +116,10 @@ async def shuffle_tasks(
     current_account: Annotated[Account, Depends(get_current_account)]
 ):
     result = await tasksService.shuffle_tasks(current_account)
-    # TODO: produce event TaskAssignedEvent(result)
+    for task in result:
+        producer.send_and_wait(
+            tasks_topic, value=create_task_event("task_assigned", task)
+        )
     return {"message": "Tasks shuffled successfully"}
 
 
@@ -122,7 +128,9 @@ async def complete_task(
     id: int, current_account: Annotated[Account, Depends(get_current_account)]
 ):
     result = await tasksService.complete_task(id, current_account)
-    # TODO: produce event TaskCompletedEvent(result)
+    producer.send_and_wait(
+        tasks_topic, value=create_task_event("task_completed", result)
+    )
     return {"message": "Task completed successfully"}
 
 

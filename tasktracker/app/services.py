@@ -60,6 +60,9 @@ class TaskService:
         self.task_repo = task_repo
         self.account_repo = account_repo
 
+    async def get_tasks_for_account(self, account: Account):
+        pass
+
     async def create_task(self, title: str, description: str, account: Account):
         task = Task(title=title, description=description)
         accounts = await self.account_repo.get_accounts()
