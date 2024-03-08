@@ -7,12 +7,13 @@ from app.repository import (
     TaskRepository,
 )
 from typing import Annotated
-from app.models import Account
+from app.models import Account, Task
 from app.services import TaskService, AuthService, AccountService
 from aiokafka import AIOKafkaProducer, AIOKafkaConsumer
 import json
 import os
 import asyncio
+import uuid
 
 
 app = FastAPI()
@@ -27,6 +28,9 @@ taskRepo = TaskRepository(db.AsyncSession)
 tasksService = TaskService(taskRepo, accountRepo)
 authService = AuthService(accountRepo, authIdentityRepo)
 accountService = AccountService(accountRepo)
+
+task_stream_topic = "task-stream"
+tasks_topic = "tasks"
 
 producer = AIOKafkaProducer(
     bootstrap_servers=os.environ.get("KAFKA_BOOTSTRAP_SERVERS"),
@@ -62,6 +66,18 @@ async def consume():
         await consumer.stop()
 
 
+def create_task_event(event_type: str, task: Task):
+    return {
+        "event_type": event_type,
+        "event_id": uuid.uuid4(),
+        "payload": {
+            "task_id": task.public_id,
+            "assigned_to": task.assigned_to,
+            "description": task.description,
+        },
+    }
+
+
 @app.on_event("startup")
 async def startup():
     await producer.start()
@@ -85,7 +101,9 @@ async def create_task(
     current_account: Annotated[Account, Depends(get_current_account)],
 ):
     result = await tasksService.create_task(title, description, current_account)
-    # TODO: produce event TaskCreatedEvent(result)
+    producer.send_and_wait(
+        task_stream_topic, value=create_task_event("task_created", result)
+    )
     # TODO: produce event TaskAssignedEvent(result)
     return {"message": "Task created successfully"}
 

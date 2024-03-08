@@ -32,7 +32,7 @@ class Task(Base):
     public_id = Column(String(50), unique=True, index=True, default=uuid.uuid4)
     description = Column(String(100))
     account_id = Column(Integer)
-    assignee_id = Column(Integer)
+    assigned_to = Column(Integer)
     status = Column(EnumColumn(Status), default=Status.CREATED)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
