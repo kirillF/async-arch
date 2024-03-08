@@ -32,31 +32,31 @@ class AccountRepository:
         self.async_session = async_session
 
     async def get_account_by_id(self, id: int) -> Optional[Account]:
-        with self.async_session() as session:
+        async with self.async_session() as session:
             result = await session.execute(select(Account).filter_by(id=id))
             return result.scalar()
 
     async def get_account_by_public_id(self, public_id: str) -> Optional[Account]:
-        with self.async_session() as session:
+        async with self.async_session() as session:
             result = await session.execute(
                 select(Account).filter_by(public_id=public_id)
             )
             return result.scalar()
 
     async def add_account(self, account: Account) -> Account:
-        with self.async_session() as session:
+        async with self.async_session() as session:
             session.add(account)
             await session.commit()
             await session.refresh(account)
             return account
 
     async def get_accounts(self):
-        with self.async_session() as session:
+        async with self.async_session() as session:
             result = await session.execute(select(Account))
             return result.scalars().all()
 
     async def get_worker_accounts(self):
-        with self.async_session() as session:
+        async with self.async_session() as session:
             result = await session.execute(select(Account).filter_by(role="worker"))
             return result.scalars().all()
 
@@ -66,32 +66,32 @@ class TaskRepository:
         self.async_session = async_session
 
     async def create_task(self, task: Task):
-        with self.async_session() as session:
+        async with self.async_session() as session:
             session.add(task)
             await session.commit()
             await session.refresh(task)
             return task
 
     async def get_incomplete_tasks(self):
-        with self.async_session() as session:
+        async with self.async_session() as session:
             result = await session.execute(
                 select(Task).filter_by(status=Status.ASSIGNED)
             )
             return result.scalars().all()
 
     async def update_tasks(self, tasks: list[Task]):
-        with self.async_session() as session:
+        async with self.async_session() as session:
             session.bulk_save_objects(tasks)
             await session.commit()
             return tasks
 
     async def get_task_by_id(self, id: int) -> Optional[Task]:
-        with self.async_session() as session:
+        async with self.async_session() as session:
             result = await session.execute(select(Task).filter_by(id=id))
             return result.scalar()
 
     async def update_task(self, task: Task) -> Task:
-        with self.async_session() as session:
+        async with self.async_session() as session:
             session.add(task)
             await session.commit()
             await session.refresh(task)

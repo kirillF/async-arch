@@ -4,7 +4,9 @@ from app.models import Account, Task, Status, AuthIdentity
 from datetime import datetime
 import httpx
 import random
+import asyncio
 import os
+import httpx
 
 
 class AuthService:
@@ -42,11 +44,19 @@ class AuthService:
                                 username=response.json().get("username"),
                             )
                             account = await self.account_repo.add_account(account)
-                        await self.identity_repo.add_auth_identity(
-                            AuthIdentity(token=token, account_id=account.id)
+                            print(account)
+                        authIdentity = await self.identity_repo.add_auth_identity(
+                            AuthIdentity(
+                                token=token,
+                                account_id=account.id,
+                                expires_at=datetime.fromtimestamp(
+                                    response.json().get("expires_at")
+                                ),
+                            )
                         )
                         return account
                 raise credentials_exception
+            print(authIdentity.id, authIdentity.token, authIdentity.expires_at)
             if authIdentity.expires_at < datetime.now():
                 await self.identity_repo.delete_auth_identity(authIdentity)
                 raise credentials_exception
@@ -67,16 +77,18 @@ class TaskService:
         task = Task(title=title, description=description)
         accounts = await self.account_repo.get_accounts()
         assignee = random.choice(accounts)
-        task.account_id = assignee.id
+        task.assigned_to = assignee.id
         await self.task_repo.create_task(task)
         return task
 
     async def shuffle_tasks(self, account: Account):
+        if account.role != "admin":
+            raise Exception("Only admin can shuffle tasks")
         tasks = await self.task_repo.get_incomplete_tasks()
         accounts = await self.account_repo.get_worker_accounts()
         for task in tasks:
             assignee = random.choice(accounts)
-            task.account_id = assignee.id
+            task.assigned_to = assignee.id
         await self.task_repo.update_tasks(tasks)
         return tasks
 
@@ -84,7 +96,7 @@ class TaskService:
         task = await self.task_repo.get_task_by_id(id)
         if not task:
             raise Exception("Task not found")
-        if task.account_id != account.id:
+        if task.assigned_to != account.id:
             raise Exception("Task is not assigned to you")
         task.status = Status.COMPLETED
         await self.task_repo.update_task(task)

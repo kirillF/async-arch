@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.security import OAuth2PasswordBearer
 import app.database as db
 from app.repository import (
@@ -14,6 +14,7 @@ import json
 import os
 import asyncio
 import uuid
+from pydantic import BaseModel
 
 
 app = FastAPI()
@@ -42,7 +43,6 @@ consumer = AIOKafkaConsumer(
     bootstrap_servers=os.environ.get("KAFKA_BOOTSTRAP_SERVERS"),
     group_id="tasktracker",
     value_deserializer=lambda v: json.loads(v.decode("utf-8")),
-    offset_reset="earliest",
 )
 
 
@@ -51,19 +51,15 @@ async def get_current_account(token: Annotated[str, Depends(oauth2_scheme)]):
 
 
 async def consume():
-    await consumer.start()
-    try:
-        async for message in consumer:
-            event = message.value
-            print(f"Received event: {event}")
-            if event["event_type"] == "AccountCreatedEvent":
-                accountService.on_account_created(event["payload"])
-            elif event["event_type"] == "AccountDeletedEvent":
-                accountService.on_account_deleted(event["payload"])
-            elif event["event_type"] == "AccountUpdatedEvent":
-                accountService.on_account_updated(event["payload"])
-    finally:
-        await consumer.stop()
+    async for message in consumer:
+        event = message.value
+        print(f"Received event: {event}")
+        if event["event_type"] == "AccountCreatedEvent":
+            accountService.on_account_created(event["payload"])
+        elif event["event_type"] == "AccountDeletedEvent":
+            accountService.on_account_deleted(event["payload"])
+        elif event["event_type"] == "AccountUpdatedEvent":
+            accountService.on_account_updated(event["payload"])
 
 
 def create_task_event(event_type: str, task: Task):
@@ -78,15 +74,22 @@ def create_task_event(event_type: str, task: Task):
     }
 
 
+class TaskReq(BaseModel):
+    title: str
+    description: str
+
+
 @app.on_event("startup")
 async def startup():
     await producer.start()
+    await consumer.start()
     asyncio.create_task(consume())
 
 
 @app.on_event("shutdown")
 async def shutdown():
     await producer.stop()
+    await consumer.stop()
 
 
 @app.get("/")
@@ -97,11 +100,12 @@ async def index(current_account: Annotated[Account, Depends(get_current_account)
 
 @app.post("/create_task")
 async def create_task(
-    title: str,
-    description: str,
+    task: TaskReq,
     current_account: Annotated[Account, Depends(get_current_account)],
 ):
-    result = await tasksService.create_task(title, description, current_account)
+    result = await tasksService.create_task(
+        task.title, task.description, current_account
+    )
     producer.send_and_wait(
         task_stream_topic, value=create_task_event("task_created", result)
     )
@@ -115,12 +119,15 @@ async def create_task(
 async def shuffle_tasks(
     current_account: Annotated[Account, Depends(get_current_account)]
 ):
-    result = await tasksService.shuffle_tasks(current_account)
-    for task in result:
-        producer.send_and_wait(
-            tasks_topic, value=create_task_event("task_assigned", task)
-        )
-    return {"message": "Tasks shuffled successfully"}
+    try:
+        result = await tasksService.shuffle_tasks(current_account)
+        for task in result:
+            producer.send_and_wait(
+                tasks_topic, value=create_task_event("task_assigned", task)
+            )
+        return {"message": "Tasks shuffled successfully"}
+    except:
+        return HTTPException(status_code=400, detail="Only admin can shuffle tasks")
 
 
 @app.put("/complete_task")
