@@ -15,6 +15,7 @@ import os
 import asyncio
 import uuid
 from pydantic import BaseModel
+import logging
 
 
 app = FastAPI()
@@ -53,13 +54,13 @@ async def get_current_account(token: Annotated[str, Depends(oauth2_scheme)]):
 async def consume():
     async for message in consumer:
         event = message.value
-        print(f"Received event: {event}")
-        if event["event_type"] == "AccountCreatedEvent":
-            accountService.on_account_created(event["payload"])
-        elif event["event_type"] == "AccountDeletedEvent":
-            accountService.on_account_deleted(event["payload"])
-        elif event["event_type"] == "AccountUpdatedEvent":
-            accountService.on_account_updated(event["payload"])
+        logging.info(f"Received event: {event}")
+        if event["event_type"] == "account_created":
+            await accountService.on_account_created(event["payload"])
+        elif event["event_type"] == "account_deleted":
+            await accountService.on_account_deleted(event["payload"])
+        elif event["event_type"] == "account_updated":
+            await accountService.on_account_updated(event["payload"])
 
 
 def create_task_event(event_type: str, task: Task):

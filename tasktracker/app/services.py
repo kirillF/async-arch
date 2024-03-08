@@ -56,7 +56,6 @@ class AuthService:
                         )
                         return account
                 raise credentials_exception
-            print(authIdentity.id, authIdentity.token, authIdentity.expires_at)
             if authIdentity.expires_at < datetime.now():
                 await self.identity_repo.delete_auth_identity(authIdentity)
                 raise credentials_exception
@@ -109,24 +108,20 @@ class AccountService:
 
     async def on_account_created(self, event):
         account = Account(
-            public_id=event["payload"]["account_id"],
-            username=event["payload"]["username"],
-            role=event["payload"]["role"],
+            public_id=event["account_id"],
+            username=event["username"],
+            role=event["role"],
         )
-        await self.account_repo.add_account(account)
+        return await self.account_repo.add_account(account)
 
     async def on_account_deleted(self, event):
-        account = await self.account_repo.get_account_by_public_id(
-            event["payload"]["account_id"]
-        )
+        account = await self.account_repo.get_account_by_public_id(event["account_id"])
         await self.account_repo.delete_account(account)
 
     async def on_account_updated(self, event):
-        account = await self.account_repo.get_account_by_public_id(
-            event["payload"]["account_id"]
-        )
-        account.username = event["payload"]["username"]
-        account.role = event["payload"]["role"]
+        account = await self.account_repo.get_account_by_public_id(event["account_id"])
+        account.username = event["username"]
+        account.role = event["role"]
         await self.account_repo.update_account(account)
 
     async def get_account_by_public_id(self, public_id: str):
